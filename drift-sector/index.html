@@ -1,0 +1,1434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Drift Sector</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&display=swap">
+<style>
+/* Layout: the pixel map owns the main column; a ship's-console side panel holds economy, victory tracks, selection, research and the log. On phones the console stacks under the map. */
+:root {
+  --void: #0a0c18;
+  --panel: #121630;
+  --panel-2: #1a1f42;
+  --line: #2c3366;
+  --shadow: #04050b;
+  --ink: #ece8d6;
+  --muted: #9095bb;
+  --you: #4fd6ff;
+  --foe: #ff6a3d;
+  --energy: #ffd23f;
+  --ore: #d4935e;
+  --data: #a98bff;
+  --relay: #6dffb0;
+  --danger: #ff4d6d;
+  --font-ui: "VT323", "Lucida Console", "Courier New", monospace;
+  --font-title: "Press Start 2P", "Lucida Console", "Courier New", monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body {
+  background: var(--void);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 20px;
+  line-height: 1.2;
+}
+.app {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+  align-items: start;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding-block: 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+@media (max-width: 900px) { .app { grid-template-columns: minmax(0, 1fr); } }
+
+.map-wrap {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 0;
+  background: #05060c;
+  border: 2px solid var(--line);
+  box-shadow: 4px 4px 0 var(--shadow);
+}
+#map {
+  display: block;
+  max-width: 100%;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+.banner {
+  position: absolute;
+  top: 10px; left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-title);
+  font-size: 10px;
+  letter-spacing: .08em;
+  color: var(--foe);
+  background: var(--shadow);
+  border: 2px solid var(--foe);
+  padding: 6px 10px;
+  white-space: nowrap;
+  animation: blink 1s steps(2) infinite;
+}
+@keyframes blink { 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { .banner { animation: none; } }
+
+.overlay {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+  background: rgba(4, 5, 11, .74);
+  overflow-y: auto;
+}
+.dialog {
+  width: min(460px, 100%);
+  background: var(--panel);
+  border: 2px solid var(--line);
+  box-shadow: 6px 6px 0 var(--shadow);
+  padding: 20px;
+  display: grid;
+  gap: 12px;
+}
+.eyebrow { margin: 0; color: var(--muted); font-size: 17px; letter-spacing: .12em; text-transform: uppercase; }
+.dialog h2 {
+  margin: 0;
+  font-family: var(--font-title);
+  font-size: clamp(18px, 4vw, 26px);
+  line-height: 1.3;
+  color: var(--you);
+  text-shadow: 3px 3px 0 #0b3b52;
+  text-wrap: balance;
+}
+.dialog h2.foe { color: var(--foe); text-shadow: 3px 3px 0 #4d1608; }
+.dialog p { margin: 0; }
+.wins { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.wins li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: start; }
+.wins li img { width: 21px; margin-top: 1px; }
+.wins b { color: var(--ink); }
+.wins span { color: var(--muted); }
+fieldset.diff { border: 2px solid var(--line); margin: 0; padding: 8px 12px 12px; display: flex; flex-wrap: wrap; gap: 8px 16px; }
+fieldset.diff legend { color: var(--muted); font-size: 17px; letter-spacing: .1em; text-transform: uppercase; padding: 0 6px; }
+.diff label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.diff input {
+  appearance: none; -webkit-appearance: none;
+  width: 14px; height: 14px; margin: 0;
+  border: 2px solid var(--muted); background: var(--shadow);
+}
+.diff input:checked { background: var(--you); border-color: var(--you); box-shadow: inset 0 0 0 2px var(--shadow); }
+.diff input:focus-visible { outline: 2px solid var(--energy); outline-offset: 2px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+button {
+  font: inherit;
+  font-size: 19px;
+  color: var(--ink);
+  background: var(--panel-2);
+  border: 2px solid var(--line);
+  box-shadow: 2px 2px 0 var(--shadow);
+  padding: 6px 10px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--you); }
+button:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button:focus-visible { outline: 2px solid var(--energy); outline-offset: 2px; }
+button.primary {
+  background: var(--you);
+  border-color: #a9ecff;
+  color: #05202c;
+  font-family: var(--font-title);
+  font-size: 12px;
+  letter-spacing: .04em;
+  padding: 12px 16px;
+}
+button.primary:hover:not(:disabled) { border-color: #ffffff; }
+
+.console { display: grid; gap: 12px; min-width: 0; }
+.box {
+  background: var(--panel);
+  border: 2px solid var(--line);
+  box-shadow: 4px 4px 0 var(--shadow);
+  padding: 12px;
+  min-width: 0;
+}
+.head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.head h1 {
+  margin: 0;
+  font-family: var(--font-title);
+  font-size: 13px;
+  letter-spacing: .06em;
+  color: var(--you);
+  text-shadow: 2px 2px 0 #0b3b52;
+}
+.turn { font-variant-numeric: tabular-nums; color: var(--muted); }
+.turn b { color: var(--ink); font-family: var(--font-title); font-size: 11px; }
+.pill { font-size: 16px; letter-spacing: .1em; text-transform: uppercase; border: 2px solid var(--line); padding: 1px 6px; color: var(--muted); }
+.head .row button { font-size: 17px; padding: 4px 8px; }
+
+.res { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.res div { display: grid; gap: 2px; justify-items: start; }
+.res .amt { display: flex; align-items: center; gap: 6px; font-family: var(--font-title); font-size: 13px; font-variant-numeric: tabular-nums; }
+.res .amt img { width: 18px; }
+.res .inc { color: var(--muted); font-size: 17px; }
+.res .lbl { font-size: 16px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+
+.tracks { display: grid; gap: 10px; }
+.track .t-head { display: flex; justify-content: space-between; gap: 8px; font-size: 18px; margin-bottom: 4px; }
+.track .t-head span:last-child { font-variant-numeric: tabular-nums; color: var(--muted); }
+.bar { height: 6px; background: var(--shadow); position: relative; margin-top: 3px; }
+.bar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--v); background: var(--c); }
+.bar.you { --c: var(--you); }
+.bar.foe { --c: var(--foe); }
+.you { color: var(--you); }
+.foe { color: var(--foe); }
+
+.sel h3 { margin: 0 0 6px; font-size: 24px; font-weight: 400; color: var(--energy); text-wrap: balance; }
+.kv { display: flex; justify-content: space-between; gap: 12px; font-size: 19px; padding: 2px 0; }
+.kv > span:first-child { color: var(--muted); }
+.kv > span:last-child { text-align: right; }
+.note { margin: 6px 0 0; color: var(--muted); font-size: 18px; }
+.hint { margin: 0; color: var(--muted); }
+.yl { display: inline-flex; gap: 8px; font-variant-numeric: tabular-nums; }
+.yl span, .cost { display: inline-flex; align-items: center; gap: 3px; }
+.yl img, .cost img, .ic { width: 12px; }
+.yl .z { opacity: .35; }
+.unit-card, .col-card { margin-top: 10px; padding-top: 10px; border-top: 2px dashed var(--line); }
+.uh { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.uh img { width: 33px; }
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 12px; font-size: 19px; font-variant-numeric: tabular-nums; }
+.btns { display: grid; gap: 6px; margin-top: 8px; }
+.btns button { display: flex; justify-content: space-between; align-items: center; gap: 8px; text-align: left; }
+.btns button .cost { margin-left: 6px; }
+.btns button .costs { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; }
+
+.end { display: grid; gap: 6px; }
+.end .sub { color: var(--muted); font-size: 18px; text-align: center; }
+
+.tech ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.tech li { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; }
+.tech li .d { grid-column: 1 / -1; color: var(--muted); font-size: 17px; }
+.tech li.owned b { color: var(--relay); }
+.tech h3, .log h3, .combat h3 { margin: 0 0 8px; font-size: 12px; font-family: var(--font-title); letter-spacing: .06em; color: var(--muted); font-weight: 400; }
+
+.combat .line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 4px 0; font-size: 18px; }
+.combat img { width: 18px; }
+.log ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 18px; max-height: 190px; overflow-y: auto; }
+.log li { display: grid; grid-template-columns: 34px 1fr; gap: 6px; }
+.log li .t { color: var(--muted); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div class="app">
+  <main class="map-wrap" id="mapWrap">
+    <canvas id="map" aria-label="Hex map of the sector"></canvas>
+    <div class="banner" id="banner" hidden>ENEMY FLEET MOVING</div>
+    <div class="overlay" id="overlay">
+      <div class="dialog" role="dialog" aria-labelledby="ovTitle">
+        <p class="eyebrow" id="ovEyebrow">Sector 7G · contested drift</p>
+        <h2 id="ovTitle">Drift Sector</h2>
+        <p id="ovText">Claim planets, squeeze every hex for yield and outfight the rival fleet. The first commander to reach any one of these goals wins:</p>
+        <ul class="wins" id="ovWins">
+          <li><img id="wRelay" alt=""><div><b>Relays.</b> <span>Park ships on relay crystals. Each one you hold at the start of your turn scores 1 point. Enemy ships next to a relay block its score. First to 20 points.</span></div></li>
+          <li><img id="wYield" alt=""><div><b>Economy.</b> <span>Earn 1200 total yield of energy, ore and data.</span></div></li>
+          <li><img id="wCap" alt=""><div><b>Conquest.</b> <span>Destroy the enemy Command Citadel.</span></div></li>
+        </ul>
+        <fieldset class="diff">
+          <legend>Rival commander</legend>
+          <label><input type="radio" name="diff" id="d-easy" value="easy"> Easy</label>
+          <label><input type="radio" name="diff" id="d-normal" value="normal" checked> Normal</label>
+          <label><input type="radio" name="diff" id="d-hard" value="hard"> Hard</label>
+        </fieldset>
+        <div class="row">
+          <button class="primary" id="launch">Launch</button>
+          <button id="reroll">New map</button>
+          <button id="cancel" hidden>Back to game</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <aside class="console">
+    <section class="box">
+      <div class="head">
+        <h1>DRIFT SECTOR</h1>
+        <div class="row">
+          <span class="pill" id="diffPill">Normal</span>
+          <button id="newBtn">New game</button>
+        </div>
+      </div>
+      <div class="turn" style="margin-top:8px">Turn <b id="turnNo">1</b> / 60</div>
+    </section>
+
+    <section class="box res" id="res" aria-label="Resources"></section>
+    <section class="box tracks" id="tracks" aria-label="Victory progress"></section>
+    <section class="box sel" id="sel" aria-live="polite"></section>
+
+    <section class="end">
+      <button class="primary" id="endTurn">End turn</button>
+      <div class="sub" id="endSub"></div>
+      <button id="techBtn">Research</button>
+    </section>
+
+    <section class="box tech" id="tech" hidden></section>
+    <section class="box combat" id="combat" hidden></section>
+    <section class="box log" id="log"></section>
+  </aside>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ---------- hex geometry (pointy-top, axial coords) ----------
+const R = 7, S = 10, SQ3 = Math.sqrt(3);
+const BW = 272, BH = 236, CX = 136, CY = 118;
+const DIRS = [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];
+const SPAN = 2 * R + 1, IDX = new Int16Array(SPAN * SPAN).fill(-1), HEX = [];
+for (let q = -R; q <= R; q++) for (let r = -R; r <= R; r++) {
+  if (Math.abs(q + r) > R) continue;
+  IDX[(q + R) * SPAN + r + R] = HEX.length;
+  HEX.push({ q, r, i: HEX.length, x: CX + S * SQ3 * (q + r / 2), y: CY + S * 1.5 * r });
+}
+const N = HEX.length;
+const at = (q, r) => (Math.abs(q) > R || Math.abs(r) > R || Math.abs(q + r) > R) ? -1 : IDX[(q + R) * SPAN + r + R];
+const NB = HEX.map(h => DIRS.map(([a, b]) => at(h.q + a, h.r + b)).filter(i => i >= 0));
+const DM = new Uint8Array(N * N);
+for (const a of HEX) for (const b of HEX) DM[a.i * N + b.i] = (Math.abs(a.q - b.q) + Math.abs(a.r - b.r) + Math.abs(a.q + a.r - b.q - b.r)) / 2;
+const dist = (a, b) => DM[a * N + b];
+const mirror = i => at(-HEX[i].q, -HEX[i].r);
+const CENTER = at(0, 0);
+
+function axRound(fq, fr) {
+  const fs = -fq - fr;
+  let q = Math.round(fq), r = Math.round(fr);
+  const s = Math.round(fs);
+  const dq = Math.abs(q - fq), dr = Math.abs(r - fr), ds = Math.abs(s - fs);
+  if (dq > dr && dq > ds) q = -r - s; else if (dr > ds) r = -q - s;
+  return [q, r];
+}
+
+// Every buffer pixel knows its hex, so hexes tile exactly and borders are single pixels.
+const NP = BW * BH;
+const PID = new Int16Array(NP), PDX = new Float32Array(NP), PDY = new Float32Array(NP);
+const EDGE = new Uint8Array(NP), GRID = new Uint8Array(NP);
+for (let y = 0; y < BH; y++) for (let x = 0; x < BW; x++) {
+  const p = y * BW + x, wx = x + .5 - CX, wy = y + .5 - CY;
+  const [q, r] = axRound((SQ3 / 3 * wx - wy / 3) / S, (2 / 3 * wy) / S);
+  const i = at(q, r);
+  PID[p] = i;
+  if (i >= 0) { PDX[p] = x + .5 - HEX[i].x; PDY[p] = y + .5 - HEX[i].y; }
+}
+for (let y = 0; y < BH; y++) for (let x = 0; x < BW; x++) {
+  const p = y * BW + x, i = PID[p];
+  if (i < 0) continue;
+  const L = x > 0 ? PID[p - 1] : -1, Rt = x < BW - 1 ? PID[p + 1] : -1;
+  const Up = y > 0 ? PID[p - BW] : -1, Dn = y < BH - 1 ? PID[p + BW] : -1;
+  EDGE[p] = (L !== i || Rt !== i || Up !== i || Dn !== i) ? 1 : 0;
+  GRID[p] = (Rt !== i || Dn !== i || L < 0 || Up < 0) ? 1 : 0;
+}
+
+// ---------- noise ----------
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function hash2(x, y) { let h = Math.imul(x, 374761393) + Math.imul(y, 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+function vnoise(x, y, sc, seed) {
+  const fx = x / sc, fy = y / sc, ix = Math.floor(fx), iy = Math.floor(fy), tx = fx - ix, ty = fy - iy, s = seed * 131;
+  const a = hash2(ix + s, iy), b = hash2(ix + 1 + s, iy), c = hash2(ix + s, iy + 1), d = hash2(ix + 1 + s, iy + 1);
+  const u = tx * tx * (3 - 2 * tx), v = ty * ty * (3 - 2 * ty);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+const BAYER = [0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5].map(v => (v + .5) / 16);
+const bay = (x, y) => BAYER[(y & 3) * 4 + (x & 3)];
+
+// ---------- rules ----------
+const T = {
+  void:   { n: 'Open space',     cost: 1,  y: [0,0,0], def: 0, d: '' },
+  ast:    { n: 'Asteroid field', cost: 2,  y: [0,2,0], def: 1, d: 'Rocks give cover: hits against ships here need one pip more.' },
+  neb:    { n: 'Nebula',         cost: 2,  y: [1,0,1], def: 0, d: 'Ships inside stay hidden unless an enemy is adjacent.' },
+  well:   { n: 'Gravity well',   cost: 1,  y: [0,0,2], def: 0, d: "Entering ends a ship's movement for the turn." },
+  star:   { n: 'Star',           cost: 99, y: [0,0,0], def: 0, block: true, d: 'Impassable. Every neighboring hex gains +1 energy.' },
+  planet: { n: 'Planet',         cost: 1,  y: [1,1,1], def: 0, d: 'A Constructor can found a colony here if the planet is unclaimed.' },
+  relay:  { n: 'Relay crystal',  cost: 1,  y: [0,0,1], def: 0, d: 'A ship parked here at the start of your turn scores 1 relay point, unless an enemy ship is adjacent.' },
+};
+const PT = {
+  terran: { n: 'Terran world', bonus: [2,0,0] },
+  lava:   { n: 'Lava world',   bonus: [0,2,0] },
+  ice:    { n: 'Ice world',    bonus: [0,0,2] },
+};
+const U = {
+  scout:   { n: 'Scout',       hp: 3, mv: 4, atk: 1, rng: 1, vis: 4, cost: [15,0,0],  d: 'Fast picket with long-range sensors.' },
+  frigate: { n: 'Frigate',     hp: 5, mv: 3, atk: 2, rng: 1, vis: 2, cost: [25,15,0], d: 'Line ship. Solid all-rounder.' },
+  lancer:  { n: 'Lancer',      hp: 3, mv: 2, atk: 2, rng: 2, vis: 2, cost: [20,30,0], d: 'Fires from 2 hexes away, out of reach of range-1 return fire.' },
+  dread:   { n: 'Dreadnought', hp: 9, mv: 2, atk: 3, rng: 1, vis: 2, cost: [45,45,0], d: 'Heavy hull and three attack dice.' },
+  ctor:    { n: 'Constructor', hp: 3, mv: 3, atk: 0, rng: 0, vis: 2, cost: [25,10,0], d: 'Unarmed. Founds a colony on an unclaimed planet.' },
+};
+const BUILD_ORDER = ['scout', 'frigate', 'lancer', 'dread', 'ctor'];
+const TECH = [
+  { id: 'sens',   n: 'Long-range sensors', cost: 30, d: '+1 vision for ships and colonies.' },
+  { id: 'weap1',  n: 'Pulse cannons',      cost: 40, d: '+1 attack die for every armed ship.' },
+  { id: 'weap2',  n: 'Plasma lances',      cost: 90, req: 'weap1', d: '+1 more attack die.' },
+  { id: 'shld1',  n: 'Deflector shields',  cost: 40, d: '+2 max hull for every ship.' },
+  { id: 'shld2',  n: 'Phase shields',      cost: 90, req: 'shld1', d: '+2 more max hull.' },
+  { id: 'eng',    n: 'Ion drives',         cost: 60, d: '+1 movement for every ship.' },
+  { id: 'mine',   n: 'Deep core mining',   cost: 45, d: '+1 ore on asteroid fields you own.' },
+  { id: 'fusion', n: 'Fusion taps',        cost: 45, d: '+1 energy on planets and star-lit hexes.' },
+  { id: 'arch',   n: 'Quantum archive',    cost: 45, d: '+1 data on nebulae, gravity wells and relays.' },
+];
+const EXT_COST = [[20,10,0], [30,30,10]], COL_UP = [40,40,20];
+const VP_WIN = 20, YIELD_WIN = 1200, MAX_TURN = 60;
+const DIFF = {
+  easy:   { n: 'Easy',   eco: .8,   risk: .35, noise: 3,   extra: 0 },
+  normal: { n: 'Normal', eco: 1,    risk: .75, noise: 1,   extra: 1 },
+  hard:   { n: 'Hard',   eco: 1.25, risk: 1,   noise: .25, extra: 2 },
+};
+const RESN = ['Energy', 'Ore', 'Data'];
+const TRGB = [[79,214,255], [255,106,61]];
+const HLRGB = [null, [109,255,176], [255,77,109]];
+
+// ---------- map generation (point-symmetric so both sides are fair) ----------
+function genMap(seed) {
+  const P = at(-3, 6), A = at(3, -6), types = ['terran', 'lava', 'ice'];
+  for (let attempt = 0; attempt < 300; attempt++) {
+    const rng = mulberry32(seed + attempt * 7919);
+    const t = new Array(N).fill('void'), pt = new Array(N).fill(null);
+    const set = (i, tt, p) => { const m = mirror(i); t[i] = t[m] = tt; pt[i] = pt[m] = p || null; };
+    const pick = arr => arr[Math.floor(rng() * arr.length)];
+    for (let i = 0; i < N; i++) {
+      if (mirror(i) < i) continue;
+      const x = rng();
+      const tt = x < .15 ? 'ast' : x < .25 ? 'neb' : x < .29 ? 'well' : x < .32 ? 'star' : x < .36 ? 'planet' : 'void';
+      set(i, tt, tt === 'planet' ? pick(types) : null);
+    }
+    const t0 = t.slice();
+    for (let i = 0; i < N; i++) {
+      if (mirror(i) < i || t0[i] !== 'void') continue;
+      const na = NB[i].filter(j => t0[j] === 'ast').length, nn = NB[i].filter(j => t0[j] === 'neb').length;
+      if (na >= 2 && rng() < .5) set(i, 'ast'); else if (nn >= 2 && rng() < .55) set(i, 'neb');
+    }
+    set(P, 'planet', 'terran');
+    for (const j of NB[P]) if (['star', 'well', 'planet', 'relay'].includes(t[j])) set(j, 'void');
+    for (let j = 0; j < N; j++) if (dist(P, j) === 2 && t[j] === 'star') set(j, 'ast');
+    set(CENTER, 'relay');
+    const rc = HEX.filter(h => dist(h.i, P) === dist(h.i, A) && dist(h.i, CENTER) >= 4 && dist(h.i, CENTER) <= 5).map(h => h.i);
+    if (!rc.length) continue;
+    set(pick(rc), 'relay');
+    const relays = t.map((v, i) => v === 'relay' ? i : -1).filter(i => i >= 0);
+    for (const r of relays) for (const j of NB[r]) if (t[j] === 'star') set(j, 'void');
+    const near = HEX.filter(h => { const d = dist(h.i, P); return d >= 2 && d <= 3 && t[h.i] !== 'relay'; }).map(h => h.i);
+    if (!near.some(i => t[i] === 'planet')) set(pick(near), 'planet', pick(types));
+    const side = () => HEX.filter(h => h.i !== P && t[h.i] === 'planet' && dist(h.i, P) < dist(h.i, A)).map(h => h.i);
+    let guard = 0;
+    while (side().length < 4 && guard++ < 50) {
+      const c = HEX.filter(h => t[h.i] === 'void' && dist(h.i, P) >= 2 && dist(h.i, P) < dist(h.i, A) && !NB[h.i].some(j => t[j] === 'planet')).map(h => h.i);
+      if (!c.length) break;
+      set(pick(c), 'planet', pick(types));
+    }
+    while (side().length > 6) {
+      const s = side().filter(i => dist(i, P) > 3);
+      if (!s.length) break;
+      set(pick(s), 'void');
+    }
+    if (side().length < 4) continue;
+    // every planet, relay and the rival capital must be reachable
+    const seen = new Uint8Array(N); seen[P] = 1; const q = [P];
+    while (q.length) { const c = q.pop(); for (const j of NB[c]) if (!seen[j] && t[j] !== 'star') { seen[j] = 1; q.push(j); } }
+    if (t.some((v, i) => (v === 'planet' || v === 'relay') && !seen[i])) continue;
+    return { t, pt, P, A };
+  }
+  throw new Error('map generation failed');
+}
+
+// ---------- state ----------
+let G = null, SOLAR = [], RELAYS = [];
+const VIS = [new Uint8Array(N), new Uint8Array(N)];
+let started = false, busy = false, FAST = false;
+let SEL = -1, SELU = null, HOVER = -1, REACH = null, TARGETS = [];
+const HL = new Uint8Array(N);
+let FLOATS = [];
+const sleep = ms => FAST ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
+
+const unitAt = h => G.units.find(u => u.h === h) || null;
+const colAt = h => G.cols.find(c => c.h === h) || null;
+const tech = (team, id) => G.pl[team].tech[id] ? 1 : 0;
+const maxHp = (type, team) => U[type].hp + 2 * (tech(team, 'shld1') + tech(team, 'shld2'));
+const mvOf = u => U[u.type].mv + tech(u.team, 'eng');
+const atkOf = u => U[u.type].atk ? U[u.type].atk + tech(u.team, 'weap1') + tech(u.team, 'weap2') : 0;
+const visOf = u => U[u.type].vis + tech(u.team, 'sens');
+const colMax = c => (c.cap ? 12 : 6) + (c.lvl - 1) * 4;
+const colVis = c => 2 + (c.lvl - 1) + tech(c.team, 'sens');
+const colName = c => c.cap ? 'Command Citadel' : 'Colony';
+const defOf = h => T[G.hex[h].t].def;
+const pHit = need => (7 - need) / 6;
+const clampNeed = v => Math.max(2, Math.min(6, v));
+const canPay = (team, c) => G.pl[team].r.every((v, k) => v >= c[k]);
+const pay = (team, c) => { const P = G.pl[team]; P.r = P.r.map((v, k) => v - c[k]); };
+const who = team => team === 0 ? 'Your' : 'Enemy';
+
+function log(m, team) {
+  G.log.unshift({ m, team, turn: G.turn });
+  if (G.log.length > 40) G.log.length = 40;
+}
+
+function deriveStatic() {
+  SOLAR = G.hex.map((h, i) => h.t !== 'star' && NB[i].some(j => G.hex[j].t === 'star'));
+  RELAYS = G.hex.map((h, i) => h.t === 'relay' ? i : -1).filter(i => i >= 0);
+  buildTerrain();
+}
+
+function newGame(diff, seed) {
+  seed = seed ?? Math.floor(Math.random() * 2 ** 31);
+  const m = genMap(seed);
+  G = {
+    seed, diff, turn: 1, cur: 0, over: null, nextId: 1,
+    hex: m.t.map((t, i) => ({ t, pt: m.pt[i], owner: -1, ext: 0, exp: [0, 0] })),
+    units: [], cols: [],
+    pl: [0, 1].map(() => ({ r: [30, 25, 0], vp: 0, total: 0, tech: {}, last: [0, 0, 0] })),
+    log: [], combat: null, caps: [m.P, m.A], intel: null,
+  };
+  deriveStatic();
+  for (const [team, h] of [[0, m.P], [1, m.A]]) {
+    G.cols.push({ id: G.nextId++, team, h, lvl: 1, hp: 12, cap: true, built: false });
+    const spots = NB[h].filter(j => !T[G.hex[j].t].block);
+    ['scout', 'frigate', 'ctor'].forEach((type, k) => { const u = addUnit(type, team, spots[k]); u.acted = false; });
+  }
+  recomputeTerritory();
+  SEL = -1; SELU = null; REACH = null; TARGETS = []; FLOATS = [];
+  startTurn(0);
+  log('Fleet deployed. Expand toward the planets and relays.', 0);
+}
+
+function addUnit(type, team, h) {
+  const u = { id: G.nextId++, type, team, h, hp: maxHp(type, team), mv: 0, acted: true, moved: false, done: false, rested: false };
+  G.units.push(u);
+  return u;
+}
+function killUnit(u) { G.units = G.units.filter(o => o !== u); if (SELU === u) { SELU = null; REACH = null; TARGETS = []; } }
+
+function recomputeTerritory() {
+  const old = G.hex.map(h => h.owner);
+  G.hex.forEach(h => { h.owner = -1; });
+  const cols = [...G.cols].sort((a, b) => a.id - b.id);
+  for (let rad = 0; rad <= 2; rad++) for (const c of cols) {
+    if (c.lvl < rad) continue;
+    for (let j = 0; j < N; j++) {
+      const H = G.hex[j];
+      if (dist(c.h, j) === rad && H.owner === -1 && !T[H.t].block) H.owner = c.team;
+    }
+  }
+  G.hex.forEach((h, i) => { if (h.owner !== old[i]) h.ext = 0; });
+}
+
+function hexYield(i, team, extOverride) {
+  const H = G.hex[i], t = H.t;
+  const y = T[t].y.slice();
+  if (t === 'planet') PT[H.pt].bonus.forEach((v, k) => { y[k] += v; });
+  if (SOLAR[i]) y[0] += 1;
+  if (team >= 0) {
+    if (tech(team, 'mine') && t === 'ast') y[1] += 1;
+    if (tech(team, 'fusion') && (t === 'planet' || SOLAR[i])) y[0] += 1;
+    if (tech(team, 'arch') && (t === 'neb' || t === 'well' || t === 'relay')) y[2] += 1;
+  }
+  const m = 1 + (extOverride ?? H.ext);
+  return y.map(v => v * m);
+}
+
+function income(team) {
+  const y = [0, 0, 0];
+  G.hex.forEach((H, i) => { if (H.owner === team) hexYield(i, team).forEach((v, k) => { y[k] += v; }); });
+  for (const c of G.cols) if (c.team === team) (c.cap ? [3, 2, 1] : [1, 1, 1]).forEach((v, k) => { y[k] += v; });
+  const mult = team === 1 ? DIFF[G.diff].eco : 1;
+  return y.map(v => Math.round(v * mult));
+}
+
+function updateVision() {
+  for (let t = 0; t < 2; t++) {
+    const v = VIS[t]; v.fill(0);
+    const src = [];
+    for (const u of G.units) if (u.team === t) src.push([u.h, visOf(u)]);
+    for (const c of G.cols) if (c.team === t) src.push([c.h, colVis(c)]);
+    for (const [h, rad] of src) { const o = h * N; for (let j = 0; j < N; j++) if (DM[o + j] <= rad) v[j] = 1; }
+    for (let j = 0; j < N; j++) if (v[j]) G.hex[j].exp[t] = 1;
+  }
+  const ec = G.cols.find(c => c.cap && c.team === 1);
+  if (ec && VIS[0][ec.h]) G.intel = ec.hp;
+}
+
+function seen(u, team) {
+  if (u.team === team) return true;
+  if (!VIS[team][u.h]) return false;
+  if (G.hex[u.h].t !== 'neb') return true;
+  return G.units.some(o => o.team === team && dist(o.h, u.h) <= 1) || G.cols.some(c => c.team === team && dist(c.h, u.h) <= 1);
+}
+
+function reach(u) {
+  const cost = new Float32Array(N).fill(1e9), prev = new Int16Array(N).fill(-1), dests = new Map();
+  if (u.mv <= 0 || u.acted || u.done) return { cost, prev, dests };
+  cost[u.h] = 0;
+  const open = [u.h];
+  while (open.length) {
+    let bi = 0;
+    for (let k = 1; k < open.length; k++) if (cost[open[k]] < cost[open[bi]]) bi = k;
+    const cur = open[bi]; open[bi] = open[open.length - 1]; open.pop();
+    if (cur !== u.h && G.hex[cur].t === 'well') continue;
+    for (const nb of NB[cur]) {
+      const tt = T[G.hex[nb].t];
+      if (tt.block) continue;
+      const ou = unitAt(nb); if (ou && ou.team !== u.team) continue;
+      const oc = colAt(nb); if (oc && oc.team !== u.team) continue;
+      const nc = cost[cur] + tt.cost;
+      if (nc > u.mv || nc >= cost[nb]) continue;
+      cost[nb] = nc; prev[nb] = cur; open.push(nb);
+    }
+  }
+  for (let i = 0; i < N; i++) if (i !== u.h && cost[i] < 1e9 && !unitAt(i)) dests.set(i, cost[i]);
+  return { cost, prev, dests };
+}
+
+function targetsFrom(u, from) {
+  const out = [];
+  if (!atkOf(u) || u.acted || u.done) return out;
+  const rng = U[u.type].rng;
+  for (const e of G.units) if (e.team !== u.team && seen(e, u.team) && dist(from, e.h) <= rng) out.push({ kind: 'unit', obj: e });
+  for (const c of G.cols) if (c.team !== u.team && G.hex[c.h].exp[u.team] && dist(from, c.h) <= rng) out.push({ kind: 'col', obj: c });
+  return out;
+}
+
+const roll = n => Array.from({ length: n }, () => 1 + Math.floor(Math.random() * 6));
+
+function resolveAttack(u, tg) {
+  const isCol = tg.kind === 'col', t = tg.obj, tH = t.h;
+  const need = clampNeed(4 + (isCol ? 1 : defOf(tH)));
+  const rolls = roll(atkOf(u)), hits = rolls.filter(r => r >= need).length;
+  const rec = { a: U[u.type].n, at: u.team, d: isCol ? colName(t) : U[t.type].n, dt: t.team, rolls, need, hits, c: null };
+  t.hp -= hits;
+  float(tH, hits ? '-' + hits : 'MISS', hits ? [255,77,109] : [160,165,200]);
+  u.acted = true; u.mv = 0;
+  u.lunge = { to: tH, t0: performance.now() };
+  if (!isCol && t.hp > 0 && atkOf(t) > 0 && dist(u.h, tH) <= U[t.type].rng) {
+    const need2 = clampNeed(4 + defOf(u.h)), r2 = roll(Math.max(1, atkOf(t) - 1)), h2 = r2.filter(r => r >= need2).length;
+    u.hp -= h2;
+    rec.c = { rolls: r2, need: need2, hits: h2 };
+    if (h2) float(u.h, '-' + h2, [255,77,109]);
+  }
+  G.combat = rec;
+  log(`${who(u.team)} ${rec.a} hit ${who(t.team).toLowerCase()} ${rec.d} for ${hits}${rec.c ? `, took ${rec.c.hits} back` : ''}.`, u.team);
+  if (!isCol && t.hp <= 0) { killUnit(t); log(`${who(t.team)} ${rec.d} destroyed.`, u.team); }
+  if (isCol && t.hp <= 0) destroyCol(t, u.team);
+  if (u.hp <= 0) { killUnit(u); log(`${who(u.team)} ${rec.a} lost to return fire.`, t.team); }
+  updateVision();
+}
+
+function destroyCol(c, by) {
+  G.cols = G.cols.filter(o => o !== c);
+  log(`${who(c.team)} ${colName(c).toLowerCase()} destroyed.`, by);
+  if (c.cap) G.over = { winner: by, reason: 'conquest' };
+  recomputeTerritory();
+}
+
+function canFound(u) {
+  return u.type === 'ctor' && !u.acted && !u.done && G.hex[u.h].t === 'planet' && !colAt(u.h) && G.hex[u.h].owner !== 1 - u.team;
+}
+function foundColony(u) {
+  G.cols.push({ id: G.nextId++, team: u.team, h: u.h, lvl: 1, hp: 6, cap: false, built: true });
+  killUnit(u);
+  recomputeTerritory();
+  updateVision();
+  log(`${who(u.team)} constructor founded a colony on a ${PT[G.hex[u.h].pt].n.toLowerCase()}.`, u.team);
+}
+function spawnHex(c) {
+  if (!unitAt(c.h)) return c.h;
+  for (const j of NB[c.h]) { const oc = colAt(j); if (!T[G.hex[j].t].block && !unitAt(j) && !(oc && oc.team !== c.team)) return j; }
+  return -1;
+}
+function buildUnit(c, type) {
+  const h = spawnHex(c);
+  if (c.built || h < 0 || !canPay(c.team, U[type].cost)) return false;
+  pay(c.team, U[type].cost);
+  addUnit(type, c.team, h);
+  c.built = true;
+  updateVision();
+  if (c.team === 0) log(`${U[type].n} launched. It can act next turn.`, 0);
+  return true;
+}
+function buildExt(team, i) {
+  const H = G.hex[i];
+  if (H.owner !== team || colAt(i) || H.ext >= 2 || !canPay(team, EXT_COST[H.ext])) return false;
+  pay(team, EXT_COST[H.ext]);
+  H.ext++;
+  if (team === 0) log(`Extractor Mk ${H.ext} online: ${T[H.t].n.toLowerCase()} now yields ×${H.ext + 1}.`, 0);
+  return true;
+}
+function upgradeCol(c) {
+  if (c.lvl >= 2 || !canPay(c.team, COL_UP)) return false;
+  pay(c.team, COL_UP);
+  c.lvl = 2; c.hp += 4;
+  recomputeTerritory(); updateVision();
+  log(`${who(c.team)} ${colName(c).toLowerCase()} expanded its border to 2 hexes.`, c.team);
+  return true;
+}
+function buyTech(team, id) {
+  const tdef = TECH.find(t => t.id === id), P = G.pl[team];
+  if (P.tech[id] || (tdef.req && !P.tech[tdef.req]) || P.r[2] < tdef.cost) return false;
+  P.r[2] -= tdef.cost;
+  P.tech[id] = 1;
+  if (id === 'shld1' || id === 'shld2') for (const u of G.units) if (u.team === team) u.hp += 2;
+  if (id === 'sens') updateVision();
+  log(`${team === 0 ? 'You' : 'Enemy'} researched ${tdef.n.toLowerCase()}.`, team);
+  return true;
+}
+
+// A relay only scores while no enemy ship sits next to it.
+const contested = (h, team) => G.units.some(e => e.team !== team && dist(e.h, h) === 1);
+
+function startTurn(team) {
+  const P = G.pl[team];
+  for (const u of G.units) if (u.team === team) {
+    if (u.rested) u.hp = Math.min(maxHp(u.type, team), u.hp + 1 + (G.hex[u.h].owner === team ? 1 : 0));
+    u.mv = mvOf(u); u.acted = false; u.moved = false; u.done = false;
+  }
+  for (const c of G.cols) if (c.team === team) { c.hp = Math.min(colMax(c), c.hp + 1); c.built = false; }
+  const inc = income(team);
+  P.r = P.r.map((v, k) => v + inc[k]);
+  P.total += inc[0] + inc[1] + inc[2];
+  P.last = inc;
+  let held = 0;
+  for (const h of RELAYS) { const o = unitAt(h); if (o && o.team === team && !contested(h, team)) held++; }
+  if (held) { P.vp += held; log(`${team === 0 ? 'You' : 'Enemy'} scored ${held} relay point${held > 1 ? 's' : ''}.`, team); }
+  if (P.vp >= VP_WIN) G.over = { winner: team, reason: 'relays' };
+  else if (P.total >= YIELD_WIN) G.over = { winner: team, reason: 'economy' };
+  updateVision();
+}
+
+function endTurn() {
+  if (G.over) return;
+  for (const u of G.units) if (u.team === G.cur) u.rested = !u.moved && !u.acted;
+  G.cur = 1 - G.cur;
+  if (G.cur === 0) G.turn++;
+  if (G.turn > MAX_TURN) {
+    const sc = t => G.pl[t].vp * 30 + G.pl[t].total;
+    G.over = { winner: sc(0) >= sc(1) ? 0 : 1, reason: 'time' };
+  } else startTurn(G.cur);
+  SELU = null; REACH = null; TARGETS = [];
+  if (SEL >= 0) { const u = unitAt(SEL); if (u && u.team === 0 && G.cur === 0) SELU = u; }
+  computeHL(); refresh();
+  if (G.over) { showOver(); return; }
+  if (G.cur === 1) runAI();
+}
+
+// ---------- AI ----------
+let AIT = null;
+function fieldFor(src) {
+  if (AIT && AIT.fields.has(src)) return AIT.fields.get(src);
+  const c = new Float32Array(N).fill(1e9); c[src] = 0;
+  const open = [src];
+  while (open.length) {
+    let bi = 0;
+    for (let k = 1; k < open.length; k++) if (c[open[k]] < c[open[bi]]) bi = k;
+    const cur = open[bi]; open[bi] = open[open.length - 1]; open.pop();
+    for (const nb of NB[cur]) {
+      const tt = T[G.hex[nb].t];
+      if (tt.block) continue;
+      const nc = c[cur] + tt.cost;
+      if (nc < c[nb]) { c[nb] = nc; open.push(nb); }
+    }
+  }
+  if (AIT) AIT.fields.set(src, c);
+  return c;
+}
+
+function bestTarget(u, from) {
+  if (!atkOf(u)) return [null, 0];
+  let bt = null, bv = -1e9;
+  const rng = U[u.type].rng, dice = atkOf(u);
+  for (const e of G.units) {
+    if (e.team === u.team || !seen(e, u.team) || dist(from, e.h) > rng) continue;
+    const ed = dice * pHit(clampNeed(4 + defOf(e.h)));
+    let v = ed * 1.5 + (ed >= e.hp - .3 ? 4 + (U[e.type].cost[0] + U[e.type].cost[1]) / 15 : 0);
+    if (atkOf(e) > 0 && dist(from, e.h) <= U[e.type].rng) v -= Math.max(1, atkOf(e) - 1) * pHit(clampNeed(4 + defOf(from)));
+    if (e.type === 'ctor') v += 2;
+    if (v > bv) { bv = v; bt = { kind: 'unit', obj: e }; }
+  }
+  for (const c of G.cols) {
+    if (c.team === u.team || !G.hex[c.h].exp[u.team] || dist(from, c.h) > rng) continue;
+    const ed = dice * pHit(5);
+    const v = ed * (c.cap ? 3 : 2) + (ed >= c.hp ? 10 : 0);
+    if (v > bv) { bv = v; bt = { kind: 'col', obj: c }; }
+  }
+  return [bt, bv];
+}
+
+function aiObjective(u, me) {
+  const foe = 1 - me;
+  const foes = G.units.filter(e => e.team === foe && seen(e, me));
+  const myCols = G.cols.filter(c => c.team === me);
+  const nearest = list => list.reduce((b, h) => b < 0 || dist(u.h, h) < dist(u.h, b) ? h : b, -1);
+  const threats = foes.filter(e => myCols.some(c => dist(c.h, e.h) <= 3));
+  if (threats.length && u.type !== 'scout') return nearest(threats.map(e => e.h));
+  if (u.type === 'scout' || u.type === 'frigate' || G.diff === 'hard') {
+    const free = RELAYS.filter(h => { const o = unitAt(h); return (!o || o === u || o.team === foe) && (!AIT.relay.has(h) || AIT.relay.get(h) === u.id); });
+    const r = nearest(free);
+    if (r >= 0 && (u.type !== 'dread' || dist(u.h, r) <= 3)) { AIT.relay.set(r, u.id); return r; }
+  }
+  const ecols = G.cols.filter(c => c.team === foe && G.hex[c.h].exp[me]).map(c => c.h);
+  if (ecols.length) return nearest(ecols);
+  if (foes.length) return nearest(foes.map(e => e.h));
+  return G.caps[foe];
+}
+
+async function moveUnit(u, dest, R0) {
+  const path = [];
+  for (let c = dest; c !== -1 && c !== u.h; c = R0.prev[c]) path.unshift(c);
+  path.unshift(u.h);
+  const show = !FAST && (u.team === 0 || path.some(h => VIS[0][h]));
+  if (show) { u.anim = { path, t0: performance.now(), step: 85 }; await sleep(85 * (path.length - 1) + 20); u.anim = null; }
+  u.mv -= R0.cost[dest];
+  if (G.hex[dest].t === 'well') u.mv = 0;
+  u.h = dest; u.moved = true;
+  updateVision();
+}
+
+async function aiCombat(u, me) {
+  const D = DIFF[me === 1 ? G.diff : 'normal'];
+  const F = fieldFor(aiObjective(u, me));
+  const R0 = reach(u);
+  const dests = [u.h, ...R0.dests.keys()];
+  const foes = G.units.filter(e => e.team !== me && seen(e, me) && atkOf(e) > 0);
+  const frac = u.hp / maxHp(u.type, me);
+  let best = u.h, bs = -1e9;
+  for (const d of dests) {
+    let s = -F[d] * 1.1 + defOf(d) * .8;
+    if (G.hex[d].t === 'relay') s += 4;
+    const [tg, tv] = bestTarget(u, d);
+    if (tg) s += Math.max(0, tv);
+    let dang = 0;
+    for (const e of foes) if (dist(e.h, d) <= mvOf(e) + U[e.type].rng) dang += atkOf(e) * pHit(clampNeed(4 + defOf(d)));
+    s -= dang * D.risk * (1.6 - frac);
+    s += (Math.random() - .5) * D.noise;
+    if (s > bs) { bs = s; best = d; }
+  }
+  if (best !== u.h) await moveUnit(u, best, R0);
+  if (G.over) return;
+  const [tg, tv] = bestTarget(u, u.h);
+  if (tg && tv > .2) {
+    const show = VIS[0][u.h] || VIS[0][tg.obj.h];
+    await sleep(show ? 160 : 0);
+    resolveAttack(u, tg);
+    await sleep(show ? 300 : 0);
+  }
+}
+
+async function aiCtor(u, me) {
+  if (canFound(u)) { foundColony(u); await sleep(200); return; }
+  const foes = G.units.filter(e => e.team !== me && seen(e, me) && atkOf(e) > 0);
+  const cands = G.hex.map((H, i) => i).filter(i => G.hex[i].t === 'planet' && !colAt(i) && G.hex[i].owner !== 1 - me && !AIT.ctor.has(i) && !foes.some(e => dist(e.h, i) <= 1));
+  let tgt = -1, bd = 1e9;
+  for (const i of cands) { const F = fieldFor(i); if (F[u.h] < bd) { bd = F[u.h]; tgt = i; } }
+  if (tgt < 0) return;
+  AIT.ctor.add(tgt);
+  const F = fieldFor(tgt), R0 = reach(u);
+  let best = u.h, bs = F[u.h];
+  for (const d of R0.dests.keys()) {
+    let s = F[d];
+    for (const e of foes) if (dist(e.h, d) <= mvOf(e) + U[e.type].rng) s += 3;
+    if (s < bs) { bs = s; best = d; }
+  }
+  if (best !== u.h) await moveUnit(u, best, R0);
+  if (canFound(u)) { foundColony(u); await sleep(200); }
+}
+
+function aiResearch(me) {
+  const order = G.diff === 'easy' && me === 1
+    ? ['weap1', 'shld1', 'sens', 'eng', 'mine', 'fusion', 'arch', 'weap2', 'shld2']
+    : ['sens', 'mine', 'weap1', 'fusion', 'shld1', 'arch', 'eng', 'weap2', 'shld2'];
+  for (const id of order) {
+    if (G.pl[me].tech[id]) continue;
+    buyTech(me, id);
+    return;
+  }
+}
+
+function aiBuild(me) {
+  const D = DIFF[me === 1 ? G.diff : 'normal'], P = G.pl[me], foe = 1 - me;
+  const myCols = G.cols.filter(c => c.team === me).sort((a, b) => b.cap - a.cap);
+  const mine = G.units.filter(u => u.team === me);
+  const nCtor = mine.filter(u => u.type === 'ctor').length;
+  let mil = mine.length - nCtor;
+  const free = G.hex.filter((H, i) => H.t === 'planet' && !colAt(i) && H.owner !== foe).length;
+  const threat = G.units.some(e => e.team === foe && seen(e, me) && atkOf(e) > 0 && myCols.some(c => dist(c.h, e.h) <= 4));
+  const targetMil = 2 + Math.floor(G.turn / 3) + D.extra;
+  let ctorQueued = nCtor;
+  const pickMil = () => {
+    const lancers = mine.filter(u => u.type === 'lancer').length, scouts = mine.filter(u => u.type === 'scout').length;
+    if (G.turn > 10 && canPay(me, U.dread.cost) && Math.random() < .45) return 'dread';
+    if (lancers < mil / 3 && canPay(me, U.lancer.cost)) return 'lancer';
+    if (scouts < 1 && canPay(me, U.scout.cost)) return 'scout';
+    if (canPay(me, U.frigate.cost)) return 'frigate';
+    if (canPay(me, U.scout.cost) && scouts < 3) return 'scout';
+    return null;
+  };
+  for (const c of myCols) {
+    if (c.built || spawnHex(c) < 0) continue;
+    let type = null;
+    if (!threat && ctorQueued < (G.diff === 'hard' ? 2 : 1) && free > ctorQueued && myCols.length < 6 && G.turn < 45) type = 'ctor';
+    else if (threat || mil < targetMil) type = pickMil();
+    if (type && buildUnit(c, type)) { if (type === 'ctor') ctorQueued++; else mil++; }
+  }
+  const reserve = threat ? [30, 30] : [10, 5];
+  const ok = c => P.r[0] - c[0] >= reserve[0] && P.r[1] - c[1] >= reserve[1] && P.r[2] >= c[2];
+  for (const c of myCols) if (c.lvl === 1 && G.turn >= 8 && !threat && ok(COL_UP)) upgradeCol(c);
+  let budget = G.diff === 'easy' && me === 1 ? 1 : 6;
+  const cands = G.hex.map((H, i) => i)
+    .filter(i => G.hex[i].owner === me && !colAt(i) && G.hex[i].ext < 2)
+    .map(i => ({ i, gain: hexYield(i, me, 0).reduce((a, b) => a + b, 0) }))
+    .filter(o => o.gain > 0)
+    .sort((a, b) => b.gain - a.gain || G.hex[a.i].ext - G.hex[b.i].ext);
+  for (const { i } of cands) {
+    if (budget <= 0) break;
+    if (ok(EXT_COST[G.hex[i].ext]) && buildExt(me, i)) budget--;
+  }
+}
+
+async function aiTurn(me) {
+  AIT = { fields: new Map(), relay: new Map(), ctor: new Set() };
+  aiResearch(me);
+  const rank = { ctor: 0, lancer: 1, scout: 2, frigate: 3, dread: 4 };
+  const order = G.units.filter(u => u.team === me).sort((a, b) => rank[a.type] - rank[b.type]);
+  for (const u of order) {
+    if (G.over) break;
+    if (!G.units.includes(u)) continue;
+    updateVision();
+    if (u.type === 'ctor') await aiCtor(u, me); else await aiCombat(u, me);
+    refresh();
+  }
+  if (!G.over) aiBuild(me);
+  AIT = null;
+}
+
+async function runAI() {
+  busy = true;
+  $('#banner').hidden = false;
+  refresh();
+  await sleep(350);
+  try { await aiTurn(1); } catch (e) { console.error(e); }
+  busy = false;
+  $('#banner').hidden = true;
+  if (G.over) { refresh(); showOver(); return; }
+  endTurn();
+}
+
+// ---------- sprites ----------
+const TEAMPAL = [
+  { a: '#4fd6ff', b: '#1d6a93', g: '#c4cde0', w: '#ffffff', y: '#ffd23f' },
+  { a: '#ff6a3d', b: '#962c1c', g: '#b9a9ae', w: '#fff1e0', y: '#ffd23f' },
+];
+const SHAPES = {
+  scout: ['...w...','..waw..','..gag..','.ggagg.','.b.a.b.','bb...bb','...y...'],
+  frigate: ['....w....','...gwg...','...gag...','..gaaag..','.bgaaagb.','bbgaaagbb','b.gg.gg.b','..y...y..'],
+  lancer: ['....w....','....g....','...gwg...','...gag...','..gaaag..','.ggaaagg.','.b.ggg.b.','..y...y..'],
+  dread: ['.....w.....','....gwg....','...gaaag...','..ggaaagg..','.bgaaaaagb.','bbgaawaagbb','bbggaaaggbb','b.gg.g.gg.b','..yy...yy..'],
+  ctor: ['.g.....g.','.gg...gg.','..gaaag..','..awwwa..','..gaaag..','.gg...gg.','.g..y..g.'],
+  col: ['...aaa...','..awwwa..','.awwwwwa.','.aaaaaaa.','ggggggggg','gbgbgbgbg'],
+  cap: ['.....w.....','.....a.....','....aaa....','...awwwa...','..awwwwwa..','.aaawwwaaa.','.aaaaaaaaa.','ggggggggggg','gbgbgbgbgbg'],
+  ext: ['..w..','.gag.','.gag.','ggagg','g.a.g'],
+};
+const ICONS = {
+  energy: { rows: ['...Y.','..yy.','.yy..','yyyyy','..yy.','.yy..','.y...'], pal: { y: '#ffd23f', Y: '#fff3b0' } },
+  ore: { rows: ['..oO..','.oOOo.','oOoood','ooooOd','.dddd.'], pal: { o: '#d4935e', O: '#f2c49b', d: '#7a4a2c' } },
+  data: { rows: ['.p.p.p.','ppppppp','.pPPPp.','ppPpPpp','.pPPPp.','ppppppp','.p.p.p.'], pal: { p: '#a98bff', P: '#e0d4ff' } },
+  relay: { rows: ['...l...','..lLm..','.lLLmm.','lLLLmmm','.dddnn.','..ddn..','...d...'], pal: { l: '#6dffb0', L: '#c8ffe4', m: '#3fd69a', d: '#2a9a74', n: '#1d6e55' } },
+  yield: { rows: ['..y..','.yYy.','yYYYy','.yYy.','..y..'], pal: { y: '#ffd23f', Y: '#fff3b0' } },
+};
+function makeSprite(rows, pal, flip) {
+  const h = rows.length, w = Math.max(...rows.map(r => r.length));
+  const c = document.createElement('canvas'); c.width = w + 2; c.height = h + 2;
+  const x = c.getContext('2d');
+  for (let yy = 0; yy < h; yy++) {
+    const row = rows[flip ? h - 1 - yy : yy];
+    for (let xx = 0; xx < w; xx++) { const ch = row[xx]; if (ch && ch !== '.') { x.fillStyle = pal[ch]; x.fillRect(xx + 1, yy + 1, 1, 1); } }
+  }
+  const id = x.getImageData(0, 0, w + 2, h + 2), d = id.data, W = w + 2, H = h + 2, src = new Uint8Array(W * H);
+  for (let p = 0; p < W * H; p++) src[p] = d[p * 4 + 3] > 0 ? 1 : 0;
+  for (let yy = 0; yy < H; yy++) for (let xx = 0; xx < W; xx++) {
+    const p = yy * W + xx;
+    if (src[p]) continue;
+    if ((xx > 0 && src[p - 1]) || (xx < W - 1 && src[p + 1]) || (yy > 0 && src[p - W]) || (yy < H - 1 && src[p + W])) { d[p * 4] = 4; d[p * 4 + 1] = 5; d[p * 4 + 2] = 11; d[p * 4 + 3] = 255; }
+  }
+  x.putImageData(id, 0, 0);
+  return c;
+}
+const SPR = {}, SPR_URL = [{}, {}];
+for (const k of Object.keys(SHAPES)) {
+  const building = k === 'col' || k === 'cap' || k === 'ext';
+  SPR[k] = [0, 1].map(t => makeSprite(SHAPES[k], TEAMPAL[t], !building && t === 1));
+  for (const t of [0, 1]) SPR_URL[t][k] = SPR[k][t].toDataURL();
+}
+const ICON = {};
+for (const k of Object.keys(ICONS)) ICON[k] = makeSprite(ICONS[k].rows, ICONS[k].pal).toDataURL();
+const RICON = [ICON.energy, ICON.ore, ICON.data];
+const PIPS = { 1: [[3,3]], 2: [[1,1],[5,5]], 3: [[1,1],[3,3],[5,5]], 4: [[1,1],[5,1],[1,5],[5,5]], 5: [[1,1],[5,1],[3,3],[1,5],[5,5]], 6: [[1,1],[5,1],[1,3],[5,3],[1,5],[5,5]] };
+const DICE = {};
+for (let v = 1; v <= 6; v++) for (const hit of [0, 1]) {
+  const c = document.createElement('canvas'); c.width = 9; c.height = 9;
+  const x = c.getContext('2d');
+  x.fillStyle = '#04050b'; x.fillRect(0, 0, 9, 9);
+  x.fillStyle = hit ? '#6dffb0' : '#3a4070'; x.fillRect(1, 1, 7, 7);
+  x.fillStyle = hit ? '#0b2a1e' : '#9095bb';
+  for (const [px, py] of PIPS[v]) x.fillRect(px + 1, py + 1, 1, 1);
+  DICE[v + '' + hit] = c.toDataURL();
+}
+
+// 3x5 pixel font for floating combat numbers
+const GLYPH = {
+  '0':'111101101101111','1':'010110010010111','2':'111001111100111','3':'111001111001111','4':'101101111001001',
+  '5':'111100111001111','6':'111100111101111','7':'111001010010010','8':'111101111101111','9':'111101111001111',
+  '-':'000000111000000','+':'000010111010000','M':'101111111101101','I':'111010010010111','S':'111100111001111',
+};
+function pixText(str, x, y, rgb) {
+  for (const [ox, col] of [[1, '#04050b'], [0, `rgb(${rgb})`]]) {
+    ctx.fillStyle = col;
+    let cx = x + ox;
+    for (const ch of str) {
+      const g = GLYPH[ch];
+      if (g) for (let k = 0; k < 15; k++) if (g[k] === '1') ctx.fillRect(cx + k % 3, y + ox + (k / 3 | 0), 1, 1);
+      cx += 4;
+    }
+  }
+}
+function float(h, txt, rgb) { if (VIS[0][h]) FLOATS.push({ h, txt, rgb, t0: performance.now() }); }
+
+// ---------- rendering ----------
+const $ = s => document.querySelector(s);
+const cvs = $('#map'), ctx = cvs.getContext('2d');
+cvs.width = BW; cvs.height = BH;
+const img = ctx.createImageData(BW, BH);
+const TERR = new Uint8ClampedArray(NP * 4);
+
+function spaceBg(x, y, dim) {
+  const h = hash2(x, y);
+  if (h < .006) return [200, 210, 255];
+  if (h < .02) return [70, 80, 120];
+  return dim ? [6, 7, 14] : [11, 13, 28];
+}
+function terrPix(i, x, y, dx, dy) {
+  const H = G.hex[i], rr = Math.hypot(dx, dy);
+  let c = spaceBg(x, y, false);
+  switch (H.t) {
+    case 'ast': {
+      c = hash2(x, y) < .03 ? [60, 55, 70] : [20, 18, 30];
+      for (let k = 0; k < 3; k++) {
+        const bx = (hash2(i * 7 + k, 3) - .5) * 10, by = (hash2(i * 7 + k, 9) - .5) * 10, br = 1.7 + hash2(i * 7 + k, 5) * 1.6;
+        const ex = dx - bx, ey = dy - by;
+        if (Math.hypot(ex, ey) < br) c = ex + ey < -.6 ? [168, 138, 108] : ex + ey < .9 ? [118, 92, 74] : [72, 54, 46];
+      }
+      break;
+    }
+    case 'neb': {
+      const n = vnoise(x, y, 5, i % 7 + 1) * .7 + vnoise(x, y, 2.5, 3) * .3, th = bay(x, y);
+      c = n > th + .15 ? [156, 70, 160] : n > th - .2 ? [86, 36, 104] : [34, 18, 50];
+      if (hash2(x, y) < .01) c = [230, 170, 240];
+      break;
+    }
+    case 'well': {
+      const v = ((rr * .9 + Math.atan2(dy, dx) * 3.2 / Math.PI) % 3 + 3) % 3;
+      c = [14, 10, 30];
+      if (rr < 1.6) c = [0, 0, 0];
+      else if (rr < 8 && v < 1.1) { const f = 1 - rr / 8; c = [60 + f * 120, 40 + f * 80, 140 + f * 115]; }
+      break;
+    }
+    case 'star': {
+      if (rr < 3) c = [255, 252, 225];
+      else if (rr < 5) c = [255, 214, 90];
+      else if (rr < 6.6) c = [255, 150, 50];
+      else if (bay(x, y) < Math.max(0, 1 - (rr - 6.6) / 3.5) * .8) c = [150, 70, 20];
+      break;
+    }
+    case 'planet': {
+      if (rr < 5.3) {
+        const lit = (-dx - dy) / 7.5, n = vnoise(x, y, 3, i);
+        const base = H.pt === 'terran' ? (n > .5 ? [70, 170, 90] : [40, 100, 190])
+          : H.pt === 'lava' ? (n > .44 && n < .56 ? [255, 150, 40] : [92, 34, 26])
+          : (n > .4 ? [220, 240, 255] : [130, 180, 225]);
+        let m = lit > .35 ? 1.25 : lit < -.3 ? .55 : lit < 0 ? .8 : 1;
+        if (lit < -.3 && bay(x, y) < .5) m = .42;
+        c = base.map(v => v * m);
+      } else if (rr < 6.3 && bay(x, y) < .5) {
+        c = H.pt === 'lava' ? [90, 30, 20] : H.pt === 'ice' ? [70, 100, 140] : [30, 70, 120];
+      }
+      break;
+    }
+    case 'relay': {
+      const ad = Math.abs(dx) + Math.abs(dy) * .8;
+      if (ad < 5.4) {
+        if (ad > 4.4) c = [24, 80, 64];
+        else if (dy < 0) c = dx < 0 ? [200, 255, 230] : [110, 235, 180];
+        else c = dx < 0 ? [60, 185, 140] : [30, 120, 95];
+      } else if (ad < 7 && bay(x, y) < (7 - ad) / 3) c = [30, 90, 70];
+      break;
+    }
+  }
+  return c;
+}
+function buildTerrain() {
+  for (let p = 0; p < NP; p++) {
+    const x = p % BW, y = p / BW | 0, i = PID[p];
+    let c = i < 0 ? spaceBg(x, y, true) : terrPix(i, x, y, PDX[p], PDY[p]);
+    if (i >= 0 && GRID[p]) c = [c[0] * .5 + 16, c[1] * .5 + 19, c[2] * .5 + 38];
+    TERR[p * 4] = c[0]; TERR[p * 4 + 1] = c[1]; TERR[p * 4 + 2] = c[2]; TERR[p * 4 + 3] = 255;
+  }
+}
+
+function unitPos(u, now) {
+  if (u.anim) {
+    const a = u.anim, k = Math.min((now - a.t0) / a.step, a.path.length - 1), s = Math.floor(k), f = k - s;
+    const A = HEX[a.path[s]], B = HEX[a.path[Math.min(s + 1, a.path.length - 1)]];
+    return [A.x + (B.x - A.x) * f, A.y + (B.y - A.y) * f, a.path[Math.round(k)]];
+  }
+  let x = HEX[u.h].x, y = HEX[u.h].y;
+  if (u.lunge) {
+    const k = (now - u.lunge.t0) / 240;
+    if (k >= 1) u.lunge = null;
+    else { const T2 = HEX[u.lunge.to], L = Math.hypot(T2.x - x, T2.y - y) || 1, f = Math.sin(Math.PI * k) * 3; x += (T2.x - x) / L * f; y += (T2.y - y) / L * f; }
+  }
+  return [x, y, u.h];
+}
+
+function draw(now) {
+  const d = img.data, pulse = (Math.sin(now / 170) + 1) / 2, V = VIS[0];
+  for (let y = 0, p = 0; y < BH; y++) for (let x = 0; x < BW; x++, p++) {
+    const o = p * 4, i = PID[p];
+    let r = TERR[o], g = TERR[o + 1], b = TERR[o + 2];
+    if (i >= 0) {
+      const H = G.hex[i];
+      if (!H.exp[0]) {
+        r = 9; g = 10; b = 20;
+        if (GRID[p]) { r = 19; g = 21; b = 40; }
+      } else {
+        if (H.owner >= 0) { const tc = TRGB[H.owner]; r += (tc[0] - r) * .08; g += (tc[1] - g) * .08; b += (tc[2] - b) * .08; }
+        if (!V[i]) { r = r * .38 + 5; g = g * .38 + 6; b = b * .42 + 12; }
+        if (EDGE[p] && H.owner >= 0) {
+          const nbs = [x > 0 ? PID[p - 1] : -1, x < BW - 1 ? PID[p + 1] : -1, y > 0 ? PID[p - BW] : -1, y < BH - 1 ? PID[p + BW] : -1];
+          if (nbs.some(j => j !== i && (j < 0 || G.hex[j].owner !== H.owner))) { const tc = TRGB[H.owner], k = V[i] ? 1 : .55; r = tc[0] * k; g = tc[1] * k; b = tc[2] * k; }
+        }
+      }
+      const hl = HL[i];
+      if (hl) {
+        const c = HLRGB[hl];
+        if (EDGE[p]) { r = c[0]; g = c[1]; b = c[2]; }
+        else if (((x + y) & 3) === 0) { r += (c[0] - r) * .55; g += (c[1] - g) * .55; b += (c[2] - b) * .55; }
+      }
+      if (EDGE[p]) {
+        if (i === SEL) { const k = .5 + .5 * pulse; r = 255 * k + r * (1 - k); g = 236 * k + g * (1 - k); b = 150 * k + b * (1 - k); }
+        else if (i === HOVER) { r += (255 - r) * .6; g += (255 - g) * .6; b += (255 - b) * .6; }
+      }
+    }
+    d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+
+  const blit = (spr, x, y, alpha) => { ctx.globalAlpha = alpha; ctx.drawImage(spr, Math.round(x - spr.width / 2), Math.round(y - spr.height / 2)); ctx.globalAlpha = 1; };
+  const hpBar = (x, y, w, hp, max, team) => {
+    const X = Math.round(x - w / 2), Y = Math.round(y);
+    ctx.fillStyle = '#04050b'; ctx.fillRect(X - 1, Y - 1, w + 2, 3);
+    ctx.fillStyle = TEAMPAL[team].a; ctx.fillRect(X, Y, Math.max(0, Math.round(w * hp / max)), 1);
+  };
+  const visibleUnits = G.units.filter(u => u.team === 0 || (u.anim ? V[unitPos(u, now)[2]] && G.hex[unitPos(u, now)[2]].t !== 'neb' : seen(u, 0)));
+  const unitHex = new Set(visibleUnits.map(u => u.h));
+
+  for (let i = 0; i < N; i++) {
+    const H = G.hex[i];
+    if (H.ext && H.exp[0]) {
+      blit(SPR.ext[H.owner >= 0 ? H.owner : 0], HEX[i].x - 4, HEX[i].y + 5, V[i] ? 1 : .55);
+      if (H.ext > 1) { ctx.fillStyle = '#ffd23f'; ctx.fillRect(Math.round(HEX[i].x - 1), Math.round(HEX[i].y + 7), 1, 1); }
+    }
+  }
+  for (const c of G.cols) {
+    if (!G.hex[c.h].exp[0]) continue;
+    const spr = (c.cap ? SPR.cap : SPR.col)[c.team], hx = HEX[c.h], up = unitHex.has(c.h);
+    const cy = hx.y + (up ? 4 : 1);
+    blit(spr, hx.x, cy, V[c.h] ? 1 : .6);
+    if (c.lvl > 1) { ctx.fillStyle = '#ffd23f'; ctx.fillRect(Math.round(hx.x + spr.width / 2 - 2), Math.round(cy - spr.height / 2), 1, 2); }
+    if (V[c.h] && c.hp < colMax(c)) hpBar(hx.x, cy + spr.height / 2, 9, c.hp, colMax(c), c.team);
+  }
+  const sorted = visibleUnits.slice().sort((a, b) => HEX[a.h].y - HEX[b.h].y);
+  for (const u of sorted) {
+    const [x, y] = unitPos(u, now), spr = SPR[u.type][u.team];
+    const yy = y - (colAt(u.h) && !u.anim ? 4 : 0);
+    const tired = u.team === 0 && G.cur === 0 && (u.acted || u.done || u.mv <= 0) && !targetsFrom(u, u.h).length;
+    blit(spr, x, yy, tired ? .5 : 1);
+    const mx = maxHp(u.type, u.team);
+    if (u.hp < mx) hpBar(x, yy + spr.height / 2, spr.width - 4, u.hp, mx, u.team);
+  }
+  FLOATS = FLOATS.filter(f => now - f.t0 < 1000);
+  for (const f of FLOATS) {
+    const k = (now - f.t0) / 1000, hx = HEX[f.h];
+    pixText(f.txt, Math.round(hx.x - f.txt.length * 2), Math.round(hx.y - 10 - k * 10), f.rgb.join(','));
+  }
+}
+
+function frame(now) { draw(now); requestAnimationFrame(frame); }
+
+function fit() {
+  const wrap = $('#mapWrap'), w = wrap.clientWidth - 4;
+  const maxH = window.innerWidth > 900 ? window.innerHeight - 40 : Infinity;
+  let sc = Math.min(w / BW, maxH / BH);
+  if (sc >= 2) sc = Math.floor(sc);
+  cvs.style.width = Math.floor(BW * sc) + 'px';
+  cvs.style.height = Math.floor(BH * sc) + 'px';
+}
+
+// ---------- input ----------
+function bufHex(e) {
+  const rc = cvs.getBoundingClientRect();
+  const x = Math.floor((e.clientX - rc.left) * BW / rc.width), y = Math.floor((e.clientY - rc.top) * BH / rc.height);
+  if (x < 0 || y < 0 || x >= BW || y >= BH) return -1;
+  return PID[y * BW + x];
+}
+function computeHL() {
+  HL.fill(0); REACH = null; TARGETS = [];
+  if (SELU && G.units.includes(SELU) && G.cur === 0 && !G.over && started) {
+    REACH = reach(SELU);
+    for (const k of REACH.dests.keys()) HL[k] = 1;
+    TARGETS = targetsFrom(SELU, SELU.h);
+    for (const t of TARGETS) HL[t.obj.h] = 2;
+  }
+}
+async function onHex(i) {
+  if (busy) return;
+  const playing = started && !G.over && G.cur === 0;
+  if (playing && SELU && G.units.includes(SELU) && i >= 0) {
+    const tg = TARGETS.find(t => t.obj.h === i);
+    if (tg) {
+      busy = true;
+      resolveAttack(SELU, tg);
+      busy = false;
+      if (!G.units.includes(SELU)) SELU = null;
+      computeHL(); refresh();
+      if (G.over) showOver();
+      return;
+    }
+    if (REACH && REACH.dests.has(i)) {
+      busy = true; HL.fill(0); refresh();
+      await moveUnit(SELU, i, REACH);
+      busy = false;
+      SEL = i;
+      computeHL(); refresh();
+      return;
+    }
+  }
+  SEL = i;
+  const u = i >= 0 ? unitAt(i) : null;
+  SELU = playing && u && u.team === 0 ? u : null;
+  computeHL(); refresh();
+}
+cvs.addEventListener('pointermove', e => { HOVER = bufHex(e); });
+cvs.addEventListener('pointerleave', () => { HOVER = -1; });
+cvs.addEventListener('click', e => onHex(bufHex(e)));
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { SEL = -1; SELU = null; computeHL(); refresh(); }
+});
+
+// ---------- panel ----------
+const yieldHTML = y => `<span class="yl">${y.map((v, k) => `<span class="${v ? '' : 'z'}"><img src="${RICON[k]}" alt="${RESN[k]}">${v}</span>`).join('')}</span>`;
+const costHTML = c => `<span class="costs">${c.map((v, k) => v ? `<span class="cost"><img src="${RICON[k]}" alt="${RESN[k]}">${v}</span>` : '').join('')}</span>`;
+
+function unitHTML(u) {
+  const D = U[u.type], mine = u.team === 0, atk = atkOf(u);
+  let s = `<div class="unit-card"><div class="uh"><img src="${SPR_URL[u.team][u.type]}" alt=""><b class="${mine ? 'you' : 'foe'}">${mine ? '' : 'Enemy '}${D.n}</b></div>
+    <div class="stats"><span>Hull ${u.hp}/${maxHp(u.type, u.team)}</span><span>Move ${mine ? `${Math.max(0, u.mv)}/${mvOf(u)}` : mvOf(u)}</span>
+    <span>${atk ? `${atk} dice` : 'Unarmed'}</span><span>Range ${D.rng}</span></div><p class="note">${D.d}</p>`;
+  if (mine && G.cur === 0 && started && !G.over) {
+    const btn = [];
+    if (u.type === 'ctor') {
+      const ok = canFound(u);
+      const why = G.hex[u.h].t !== 'planet' ? 'Fly to an unclaimed planet first' : colAt(u.h) ? 'Planet already settled' : 'Planet is inside the enemy border';
+      btn.push(`<button data-act="found" data-u="${u.id}" ${ok ? '' : 'disabled'}><span>${ok ? 'Found colony here' : why}</span></button>`);
+    }
+    if (!u.acted && !u.done) btn.push(`<button data-act="wait" data-u="${u.id}"><span>Stand down for this turn</span></button>`);
+    if (u.acted || u.done) btn.push(`<p class="note">This ship has finished for the turn.</p>`);
+    s += `<div class="btns">${btn.join('')}</div>`;
+  }
+  return s + '</div>';
+}
+function colHTML(c) {
+  const mine = c.team === 0;
+  let s = `<div class="col-card"><div class="uh"><img src="${SPR_URL[c.team][c.cap ? 'cap' : 'col']}" alt=""><b class="${mine ? 'you' : 'foe'}">${mine ? '' : 'Enemy '}${colName(c)}</b></div>
+    <div class="kv"><span>Level</span><span>${c.lvl} · border ${c.lvl} hex${c.lvl > 1 ? 'es' : ''}</span></div>
+    <div class="kv"><span>Hull</span><span>${VIS[0][c.h] ? `${c.hp}/${colMax(c)}` : 'Unknown'}</span></div>`;
+  if (mine && G.cur === 0 && started && !G.over) {
+    const blocked = spawnHex(c) < 0;
+    s += `<div class="btns">${BUILD_ORDER.map(t => `<button data-act="build" data-type="${t}" data-c="${c.id}" ${c.built || blocked || !canPay(0, U[t].cost) ? 'disabled' : ''}><span>${U[t].n}</span>${costHTML(U[t].cost)}</button>`).join('')}`;
+    if (c.lvl < 2) s += `<button data-act="upcol" data-c="${c.id}" ${canPay(0, COL_UP) ? '' : 'disabled'}><span>Expand border to 2 hexes</span>${costHTML(COL_UP)}</button>`;
+    s += '</div>';
+    s += `<p class="note">${c.built ? 'Shipyard busy until next turn.' : blocked ? 'Every launch bay is blocked by ships.' : 'One launch per colony per turn.'}</p>`;
+  }
+  return s + '</div>';
+}
+function selHTML() {
+  if (SEL < 0) return `<p class="hint">Tap one of your ships to see where it can fly (green) and what it can shoot (red). Tap a colony to launch ships, or any hex inside your border to build an extractor.</p>`;
+  const i = SEL, H = G.hex[i];
+  if (!H.exp[0]) return `<h3>Uncharted hex</h3><p class="hint">Fly a ship nearby to scan it.</p>`;
+  const tt = T[H.t], name = H.t === 'planet' ? PT[H.pt].n : tt.n;
+  let s = `<h3>${name}</h3>`;
+  if (!tt.block) s += `<div class="kv"><span>Yield per turn</span>${yieldHTML(hexYield(i, H.owner >= 0 ? H.owner : 0))}</div>`;
+  if (!tt.block) s += `<div class="kv"><span>Move cost</span><span>${H.t === 'well' ? '1, then stop' : tt.cost}</span></div>`;
+  if (tt.def) s += `<div class="kv"><span>Cover</span><span>+${tt.def}</span></div>`;
+  s += `<div class="kv"><span>Border</span><span class="${H.owner === 0 ? 'you' : H.owner === 1 ? 'foe' : ''}">${H.owner === 0 ? 'Yours' : H.owner === 1 ? 'Enemy' : 'Unclaimed'}</span></div>`;
+  if (H.ext) s += `<div class="kv"><span>Extractor</span><span>Mk ${H.ext} · ×${H.ext + 1} yield</span></div>`;
+  const notes = [tt.d, SOLAR[i] ? 'Star-lit: +1 energy.' : ''].filter(Boolean).join(' ');
+  if (notes) s += `<p class="note">${notes}</p>`;
+  if (H.owner === 0 && !colAt(i) && H.ext < 2 && G.cur === 0 && started && !G.over) {
+    const base = hexYield(i, 0, 0), now = hexYield(i, 0), next = hexYield(i, 0, H.ext + 1);
+    if (base.some(v => v)) {
+      s += `<div class="btns"><button data-act="ext" data-h="${i}" ${canPay(0, EXT_COST[H.ext]) ? '' : 'disabled'}><span>${H.ext ? 'Upgrade to extractor Mk 2' : 'Build extractor'}</span>${costHTML(EXT_COST[H.ext])}</button></div>
+        <p class="note">Yield ${now.join('/')} → ${next.join('/')} (energy/ore/data).</p>`;
+    }
+  }
+  const c = colAt(i); if (c) s += colHTML(c);
+  const u = unitAt(i); if (u && seen(u, 0)) s += unitHTML(u);
+  return s;
+}
+function trackHTML(label, a, b, max, fmtA, fmtB) {
+  const pc = v => Math.max(0, Math.min(100, v / max * 100)) + '%';
+  return `<div class="track"><div class="t-head"><span>${label}</span><span><span class="you">${fmtA ?? a}</span> · <span class="foe">${fmtB ?? b}</span> / ${max}</span></div>
+    <div class="bar you" style="--v:${pc(a)}"></div><div class="bar foe" style="--v:${b == null ? '0%' : pc(b)}"></div></div>`;
+}
+function refresh() {
+  if (!G) return;
+  const P = G.pl[0], inc = income(0);
+  $('#turnNo').textContent = Math.min(G.turn, MAX_TURN);
+  $('#diffPill').textContent = DIFF[G.diff].n;
+  $('#res').innerHTML = [0, 1, 2].map(k => `<div><span class="lbl">${RESN[k]}</span><span class="amt"><img src="${RICON[k]}" alt="">${P.r[k]}</span><span class="inc">+${inc[k]} / turn</span></div>`).join('');
+  const myCap = G.cols.find(c => c.cap && c.team === 0), foeCap = G.cols.find(c => c.cap && c.team === 1);
+  const foeHp = foeCap ? (VIS[0][foeCap.h] ? foeCap.hp : G.intel) : 0;
+  $('#tracks').innerHTML = trackHTML('Relay points', P.vp, G.pl[1].vp, VP_WIN)
+    + trackHTML('Total yield', P.total, G.pl[1].total, YIELD_WIN)
+    + trackHTML('Citadel hull', myCap ? myCap.hp : 0, foeHp, 12, null, foeHp == null ? '?' : foeHp);
+  $('#sel').innerHTML = selHTML();
+  const ready = G.units.filter(u => u.team === 0 && !u.acted && !u.done && (u.mv > 0 || targetsFrom(u, u.h).length)).length;
+  const myTurn = started && !G.over && G.cur === 0;
+  $('#endTurn').disabled = !myTurn || busy;
+  $('#endSub').textContent = !started ? 'Choose a rival and launch.' : G.over ? 'Match over.' : G.cur === 1 ? 'Enemy turn in progress…' : ready ? `${ready} ship${ready > 1 ? 's' : ''} still ready` : 'All ships have acted';
+  $('#techBtn').textContent = $('#tech').hidden ? `Research (${P.r[2]} data)` : 'Hide research';
+  if (!$('#tech').hidden) {
+    $('#tech').innerHTML = `<h3>RESEARCH</h3><ul>${TECH.map(t => {
+      if (P.tech[t.id]) return `<li class="owned"><b>${t.n}</b><span class="you">Done</span><span class="d">${t.d}</span></li>`;
+      const lock = t.req && !P.tech[t.req];
+      return `<li><b>${t.n}</b><button data-act="tech" data-id="${t.id}" ${lock || P.r[2] < t.cost || !myTurn ? 'disabled' : ''}>${costHTML([0, 0, t.cost])}</button><span class="d">${t.d}${lock ? ` Needs ${TECH.find(x => x.id === t.req).n.toLowerCase()}.` : ''}</span></li>`;
+    }).join('')}</ul>`;
+  }
+  const cb = G.combat;
+  $('#combat').hidden = !cb;
+  if (cb) {
+    const dice = (rolls, need) => rolls.map(v => `<img src="${DICE[v + '' + (v >= need ? 1 : 0)]}" alt="${v}">`).join('');
+    $('#combat').innerHTML = `<h3>LAST COMBAT</h3>
+      <div class="line"><span class="${cb.at ? 'foe' : 'you'}">${cb.a}</span> → <span class="${cb.dt ? 'foe' : 'you'}">${cb.d}</span></div>
+      <div class="line">${dice(cb.rolls, cb.need)} <span>${cb.hits} hit${cb.hits === 1 ? '' : 's'} on ${cb.need}+</span></div>
+      ${cb.c ? `<div class="line"><span>Return fire</span> ${dice(cb.c.rolls, cb.c.need)} <span>${cb.c.hits} hit${cb.c.hits === 1 ? '' : 's'} on ${cb.c.need}+</span></div>` : ''}`;
+  }
+  $('#log').innerHTML = `<h3>SHIP LOG</h3><ol>${G.log.slice(0, 14).map(l => `<li><span class="t">T${l.turn}</span><span class="${l.team === 1 ? 'foe' : ''}">${l.m}</span></li>`).join('')}</ol>`;
+}
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('button[data-act]');
+  if (!b || busy || !started || G.over || G.cur !== 0) return;
+  const act = b.dataset.act;
+  if (act === 'build') { const c = G.cols.find(c => c.id === +b.dataset.c); if (c) buildUnit(c, b.dataset.type); }
+  else if (act === 'upcol') { const c = G.cols.find(c => c.id === +b.dataset.c); if (c) upgradeCol(c); }
+  else if (act === 'ext') buildExt(0, +b.dataset.h);
+  else if (act === 'tech') buyTech(0, b.dataset.id);
+  else if (act === 'found') { const u = G.units.find(u => u.id === +b.dataset.u); if (u && canFound(u)) foundColony(u); SELU = null; }
+  else if (act === 'wait') { const u = G.units.find(u => u.id === +b.dataset.u); if (u) { u.done = true; u.mv = 0; } }
+  computeHL(); refresh();
+});
+$('#endTurn').addEventListener('click', () => { if (!busy && started && !G.over && G.cur === 0) endTurn(); });
+$('#techBtn').addEventListener('click', () => { $('#tech').hidden = !$('#tech').hidden; refresh(); });
+
+// ---------- overlay ----------
+$('#wRelay').src = ICON.relay; $('#wYield').src = ICON.yield; $('#wCap').src = SPR_URL[1].cap;
+const chosenDiff = () => (document.querySelector('input[name="diff"]:checked') || {}).value || 'normal';
+function showStart(inGame) {
+  $('#ovEyebrow').textContent = 'Sector 7G · contested drift';
+  $('#ovTitle').textContent = 'Drift Sector';
+  $('#ovTitle').className = '';
+  $('#ovText').textContent = 'Claim planets, squeeze every hex for yield and outfight the rival fleet. The first commander to reach any one of these goals wins:';
+  $('#ovWins').hidden = false;
+  $('#launch').textContent = inGame ? 'Abandon and launch new' : 'Launch';
+  $('#cancel').hidden = !inGame;
+  $('#cancel').textContent = 'Back to game';
+  $('#reroll').hidden = !!inGame;
+  $('#overlay').hidden = false;
+}
+function showOver() {
+  const o = G.over, win = o.winner === 0;
+  const why = {
+    relays: win ? 'Your fleet held the relay crystals long enough to lock down the sector.' : 'The rival fleet held the relay crystals long enough to lock down the sector.',
+    economy: win ? 'Your extractors out-produced the rival: 1200 total yield earned.' : 'The rival economy reached 1200 total yield first.',
+    conquest: win ? 'The enemy Command Citadel is destroyed.' : 'Your Command Citadel has fallen.',
+    time: win ? 'Turn 60 reached. You lead on relay points and yield.' : 'Turn 60 reached. The rival leads on relay points and yield.',
+  }[o.reason];
+  $('#ovEyebrow').textContent = `Turn ${Math.min(G.turn, MAX_TURN)} · ${DIFF[G.diff].n} rival`;
+  $('#ovTitle').textContent = win ? 'Sector secured' : 'Sector lost';
+  $('#ovTitle').className = win ? '' : 'foe';
+  $('#ovText').textContent = `${why} Relay points ${G.pl[0].vp}–${G.pl[1].vp}, total yield ${G.pl[0].total}–${G.pl[1].total}.`;
+  $('#ovWins').hidden = true;
+  $('#launch').textContent = 'Launch new game';
+  $('#cancel').hidden = false;
+  $('#cancel').textContent = 'View the map';
+  $('#reroll').hidden = true;
+  $('#overlay').hidden = false;
+}
+$('#launch').addEventListener('click', () => {
+  const fresh = started || G.over;
+  newGame(chosenDiff(), fresh ? undefined : G.seed);
+  started = true; busy = false;
+  $('#overlay').hidden = true; $('#banner').hidden = true;
+  refresh();
+});
+$('#reroll').addEventListener('click', () => {
+  newGame(chosenDiff());
+  started = false;
+  showStart(false);
+  refresh();
+});
+$('#cancel').addEventListener('click', () => { $('#overlay').hidden = true; $('#cancel').textContent = 'Back to game'; });
+$('#newBtn').addEventListener('click', () => { if (busy) return; if (G.over || !started) showStart(false); else showStart(true); });
+
+// ---------- boot ----------
+function boot(data) {
+  if (data && data.G) {
+    G = data.G; started = !!data.started;
+    deriveStatic(); updateVision(); computeHL();
+    $('#overlay').hidden = started;
+    refresh();
+    if (G.over) showOver();
+    else if (started && G.cur === 1) runAI();
+  } else {
+    newGame('normal');
+    started = false;
+    showStart(false);
+    refresh();
+  }
+  fit();
+  requestAnimationFrame(frame);
+}
+window.addEventListener('resize', fit);
+new ResizeObserver(fit).observe($('#mapWrap'));
+const hot = window.claude && window.claude.hot;
+if (hot && hot.snapshot) hot.snapshot(() => ({ G, started }));
+if (hot && hot.ready) hot.ready(boot); else boot(hot && hot.data ? hot.data : {});
+})();
+</script>
+</body>
+</html>
